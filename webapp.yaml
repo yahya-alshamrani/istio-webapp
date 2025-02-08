@@ -1,0 +1,167 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: webapp-ns
+  labels:
+    istio-injection: enabled
+  namespace: webapp-ns
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: webapp
+  name: webapp-v1
+  namespace: webapp-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webapp
+      version: v1
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: webapp
+        version: v1
+    spec:
+      containers:
+        - image: docker.io/yahyaalshamrani/custom-webapp:v0.1
+          name: nginx
+          ports:
+            - containerPort: 8080
+          resources: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  name: webapp
+  namespace: webapp-ns
+spec:
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      protocol: TCP
+      name: http-webapp
+  selector:
+    app: webapp
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: webapp
+  name: webapp-v2
+  namespace: webapp-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webapp
+      version: v2
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: webapp
+        version: v2
+    spec:
+      containers:
+        - image: docker.io/yahyaalshamrani/custom-webapp:v0.2
+          name: nginx
+          ports:
+            - containerPort: 8080
+          resources: {}
+---
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: webapp-gateway
+  namespace: webapp-ns
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 8443
+        name: https
+        protocol: HTTPS
+      hosts: ["webapp.lab.local"]
+      tls:
+        mode: SIMPLE
+        credentialName: webapp-tls
+    - port:
+        number: 8080
+        name: http
+        protocol: HTTP
+      hosts: ["webapp.lab.local"]
+      tls:
+        httpsRedirect: true
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: webapp-virtualservice
+  namespace: webapp-ns
+spec:
+  gateways: ["webapp-gateway"]
+  hosts: ["webapp.lab.local"]
+  http:
+    - route:
+        - destination:
+            host: webapp
+            subset: v1
+          weight: 50
+        - destination:
+            host: webapp
+            subset: v2
+          weight: 50
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: webapp-destinationrule
+  namespace: webapp-ns
+spec:
+  host: webapp
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+    - name: v2
+      labels:
+        version: v2
+---
+apiVersion: v1
+data:
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZOakNDQXg2Z0F3SUJBZ0lVY1lDVE9nTmVsOERNQWdUWmRMTUxpdG5WQURFd0RRWUpLb1pJaHZjTkFRRUwKQlFBd0d6RVpNQmNHQTFVRUF3d1FkMlZpWVhCd0xteGhZaTVzYjJOaGJEQWdGdzB5TkRFeU1qSXlNVEEwTVRWYQpHQTh5TWprNE1UQXdOakl4TURReE5Wb3dHekVaTUJjR0ExVUVBd3dRZDJWaVlYQndMbXhoWWk1c2IyTmhiRENDCkFpSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnSVBBRENDQWdvQ2dnSUJBSmlrTDhIU0h4VC9PSVpkRmlieUdsMnYKdFF2QTVkNWFTc005OSt0K09TSjZwTVJzbWlIbXBzZFlCNlc1OGZMYi8vTk11RE0zMkd4K3hEV1FHaHZUNXhiSQp1bmJ5V2kvZkhvNTQ3M21mMmYyNnoxeWJ6U0JhaVVjelZXanp4WVQzakc1UjNCU1BDVTJuRUVTandhOVUra3RrCjMxMzRmVHNQb25GZGREUWF6ODN0R05wVU0yTVZZZy8xYVVwN3lsZ2tQU3dyeWlQcGcyWm9VZDIvRGlxU0dYSVIKZW8ySnA3WGkvK2hiTWV6UkRBMnBFVDRIM1duTlFpYjZWcUtDdXZhbHk3UGFkVmV2WEF5czZ5WitRVFluemZIbgpaSHdINGRRN3QxK2NkcC9seElUZmNRRVhiMEx1bUhyMUVvSFlGeFZNSk16TXZDVmRwMEcxQVF1alovMnJxNjIxCkJvRWpuYVk5MHNrcXpacnNqelBXTVpCQVFZUDcxeUtUc0RxdEJSTHhpRjM5UHBoMDYrYXpwNmRyK2M1Nndad1EKdEN6dGxOdnF6eWxMMy9YZ1BoZ2NvQVZ0RGhqWDU1bVhEU0R2dUEyVVovY0lYcnhEM3ZzS3d1Vk1kM0VTNGxHVwpuSGFwQVhQeERmcldjUFFBMkY0R21tVE1yOTMvRHAybWJEUk5FdTF6YmFMamxIMmFkVnI3OXkrVWJITCsrSnZPCndqbmN2d3BXdkZSRDZ1QW9MZFdheFpKVzAzaG9rRzl4OTMvenV5dzRKK2FqT1F0VndrcWYyZXU3Vlh4cEt5RzkKNnlkUTJWZVIxQzlTRGxtT0xLMGNGWmVqZ2lkbmJ4aUdOdi9jY20xYTdJU1dyUGNQaUVidDcyUWxYS0VBZlllbQphNzY1Rk5FOEpmZTg4OVYxcjFEbkFnTUJBQUdqY0RCdU1CMEdBMVVkRGdRV0JCU01LYnc5ejBuUEh1b1NLTHU3CkpLeUUyd1pBVWpBZkJnTlZIU01FR0RBV2dCU01LYnc5ejBuUEh1b1NLTHU3Skt5RTJ3WkFVakFQQmdOVkhSTUIKQWY4RUJUQURBUUgvTUJzR0ExVWRFUVFVTUJLQ0VIZGxZbUZ3Y0M1c1lXSXViRzlqWVd3d0RRWUpLb1pJaHZjTgpBUUVMQlFBRGdnSUJBRTRiWmw1UEZTUkxid3FhYmJMVXJvSHNFZTR3SjdzV3JUQXUySjQyWUZ2ZjVlZHNFdnVtCi9kbDJHdngwd0FoSGJ4Z0VDTzJpYVgwRmZkSXRYZm1vSVJYSGF3OXZEV21NckdIZk5ZNnNibE1sSjlLSlJoYS8KZUFXdUJnajR1L1ZuS2ZZZ25OZXl2NFVxUlZYRk01cXoySzljZUl6cW1CcFFScUVaaHhObTJ2amxuMlRPSEhLVAo4VVhqYWRjbzI1TTRxSnJBcnJVNlVSWFlTR25nbGhlREh3M1lWT2hlK0VuOHhtOVJncEpneU1nc0FVV1Z1R2tGCm9Qcm1HbXUwWkltYS8xdldoL2Q1SlNMM004dTdCazIxQlE1U05JTjN2MllxSEJOSWNaeU1iY0ZwNlA5WWFmc1oKVWNVSGVHN3FwQ1c5Z3ZybmpQNU5waCtTQ2VUV1ZUVzh6M3dtSzM3MHY4ano0S2VqU3BvejltWGJoQWxMcVc1MwpRYXk0aCs0bk5HelA2cnJ5aUR6TVZmdVNNRDhwR2ZtdHF4cGxBOVJnWjVqOE9qaC9hQ1dFSWNSMTJHdEJNUHJUCjREaFlEYnoxSWtSVFIybjQxTkFzeDBySkptZkRnVkU1YkxLeTEyZWdwNlFtZkJUSDdlS1pLWDVyaElpYnpTRkoKS2IwUFFZR1N0aWZVQldEY2F4NWFWd0J2ZjQ3cU9TOEc0NFR5NDBVdmFZRTQ0c2djVzhXbFhpaUNYVDd6bmFFdApVWWdzbTRFemlzMmJmZU9ielFSTzB6TTBSTTQyZldVWDRoMDZRTWdvNGh1TWpwZVFVRyt6bkF5Z2lsa2FpbDM0CmZoRTFGQmIrVXJGdEhNZmY3UFlIc1ZlaTl6N3BkMDVmb1pyUlk1VzFISklNaU5RNFpFWDFNQnBoCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUpRZ0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQ1N3d2dna29BZ0VBQW9JQ0FRQ1lwQy9CMGg4VS96aUcKWFJZbThocGRyN1VMd09YZVdrckRQZmZyZmpraWVxVEViSm9oNXFiSFdBZWx1Zkh5Mi8velRMZ3pOOWhzZnNRMQprQm9iMCtjV3lMcDI4bG92M3g2T2VPOTVuOW45dXM5Y204MGdXb2xITTFWbzg4V0U5NHh1VWR3VWp3bE5weEJFCm84R3ZWUHBMWk45ZCtIMDdENkp4WFhRMEdzL043UmphVkROakZXSVA5V2xLZThwWUpEMHNLOG9qNllObWFGSGQKdnc0cWtobHlFWHFOaWFlMTR2L29XekhzMFF3TnFSRStCOTFwelVJbStsYWlncnIycGN1ejJuVlhyMXdNck9zbQpma0UySjgzeDUyUjhCK0hVTzdkZm5IYWY1Y1NFMzNFQkYyOUM3cGg2OVJLQjJCY1ZUQ1RNekx3bFhhZEJ0UUVMCm8yZjlxNnV0dFFhQkk1Mm1QZExKS3MyYTdJOHoxakdRUUVHRCs5Y2lrN0E2clFVUzhZaGQvVDZZZE92bXM2ZW4KYS9uT2VzR2NFTFFzN1pUYjZzOHBTOS8xNEQ0WUhLQUZiUTRZMStlWmx3MGc3N2dObEdmM0NGNjhROTc3Q3NMbApUSGR4RXVKUmxweDJxUUZ6OFEzNjFuRDBBTmhlQnBwa3pLL2QvdzZkcG13MFRSTHRjMjJpNDVSOW1uVmErL2N2CmxHeHkvdmlienNJNTNMOEtWcnhVUStyZ0tDM1Ztc1dTVnRONGFKQnZjZmQvODdzc09DZm1vemtMVmNKS245bnIKdTFWOGFTc2h2ZXNuVU5sWGtkUXZVZzVaaml5dEhCV1hvNEluWjI4WWhqYi8zSEp0V3V5RWxxejNENGhHN2U5awpKVnloQUgySHBtdSt1UlRSUENYM3ZQUFZkYTlRNXdJREFRQUJBb0lDQUR6VjgxTEVkQzdpS1owanJKaUpGWWtSClpvN3dxcTBjUDMvaFN0WkkwR3kxaE1Ya291bXdDL2lYVlRUd0QwWkQrSmIzbE5LVkIyVDJnU3ozNmUvOVhMVHYKKzZFOHBrVStIK2VZdTVrMTVLUUR1SEdvaHZER0pNQ0Q3UjZQU2NIZEI5TlFQTzdVczFpSHBTdzJPQk94UXJDWgoyNHlRWlJrTStpbEVuZlBHVzl3dkN5QzVQbUhYTytZd1lXNldOK2M1U2tnNGk3QVVlWkp2TVhHM20rWExwT2laCm5zYWFmb1UzbTliM3djWW82eXptblVDajBkTkJRNFJWY2dJREtKRDFNMkxUUnNGVDJ0UVNkd1k0ZTdVaDJDcjUKbGtyNHVVRGxMQWluUzRBZkMxd0owZmdsWnVxK1BYZUVCWVJLbzZpUldIbG5mL1ZFaGt6aDN6RE1SNzRLbGJsZgo4eWVLK2N0YkpQUldjWWdydnF3MUg1MHM4WU51QUYzWVVkVDByQ2JuSUtnUDY0aDBDUkZKK3YzRXluQzFvNGlOClFjcEU2KzRPMjk3NTZjVWI0eHk3VjVTSUwxY3N0ajhrVUNQQjRjUFhLRWttZDljcXNUZzJUSndVSjJWOEhwQlkKY1ZBQ3ArRnJhOUw4ajJOZXU0L0YyOVcyQmFLUnBlMmNsMjZVOXdzUUVENnRNQnRPYmo3YjI5Y1Jmbzg3Y3loZQpSendhWkZqVVFtZVE2aU1XSXQ2RzRqWndDRDNBUVo4MFdES01JN3NZVHdZeW9ZckpVM0NWMkx1RnhiOGkvR3hKClV2UnRKK3c2YkNHcG84bW9sQ0NrS3NjeUNLTEVxMVg1c1NyNlphU2l2V0R6Qjc3NW1aQkg3UXdZd1R5TUJBSnoKc2p2b0M2aUY0bDcyY3JvN000eEJBb0lCQVFEU2RxbHh5TjEwLzkvRzN6MjVoc1grblhmajBCRTE3ZE5OUS9WZgpkTUk1NzhDNzlpc3JjZFdOdTJIS1F5ZUJKQmsrV3BQVEYxcjlqa1M2b3phWnoxYjFYb1l0QXVkNE1BNldhbVdOCldtS3V2NFFBMUNQb3lybkR0UDZnWGVtMDZva3pHaU54bUJ2QVJWVUVLUVZwNUtoMjBCTVVQT3I5YXF2NWV2UUIKSG9tQ2pMVSt5clcrRlB4THVRUFZicEJESHdBWXRDckF0eWlTbEMzUzJmR2RVVnBUM3BjendKNXM2S1U3djZILwpwaGFQZE50Z3RTdDZZNy9jSi9sczQxeFdwaW5vdmZpVE02SmZIQWhaS2xFUmxVNCtZVmxyaEV5Umsxbk90R0JtCjlCUzh6Y1MraE1hV3hMVlRvM3FaeVhpS0VGUFpPZjBuSFFJSEVnT1R5cjJVTmthMUFvSUJBUUM1cXRIVkdmUzQKKzRnaHhyUVo5RE5RSWEwaU13aE0rRk9BbXJidURYOHVPeFVPU0d4WnNUYXM1Z0I2Z2Z5c2E3MTJid0lHYjRTVgpwMUJtTHpFNVZpRG5ZOWM1dTdHdjMrS084N25mNjV0eEdxK1NlREZOdnY5cmkzeUFVSG5zeVZKbE44RlhBcjlyCnNkaklUTXMvRVZ5aVFsTnRZV0ZWSTYxSGx6VmE0QlVtZWhINHNpemRKVExxb1QvRUhJa3NRME9STlJVaGc4LzIKT2ptS1lBRnZtSFRvcGo0blBmOU0wQ3pLTGNOb3hQVzFKVGcvMmhIR04zbjQvOHFsbjFGMk4vcXRibkNHQTR3LwpHcXVVdGczYW41ZGxGSDZMUXdxY283eDQzd1QySjJiaVVKU1BPemtCUkE5YWY4ZE5nSm9hRHFoNWZOL1FKamlTCldyVkZJcWcvdlg2ckFvSUJBUUM0M012WEN5VWlhTUpKYjd0SzQ4dXo2dUxzOHN5N1B1djBHVFpGSTB5YkVUR00KcUJ5aEszcjE1RnB3Qys1K0s1UVV4Z0RFVU9aMmd1bHh1bnp5TzBIWmdxNStpT2VDRlV3cTZNZk1rbEROeDZFTwpEVWlCYU5na3hDMUg5VldidU1yTVhUQTJ6ZkhLUDl2K0xIMzUxb1AyNEt0eGdsU3lSV2xMV0tsTTltSzRqaG1CClR4SzJKTDY3VUliQ2lUd2tDTzNQeFNrc1gzVSswdk14R29oMHM0bVEwNXFpTlpXeWVlTHhDVkVsT2VEbEh6SzIKemt1alZFeW85MS9LT2liWVlWbThlbWtGK3p1cktQZFlRcWcwdHAya2cyUEU0YzlUcTBjZUhpZnpKbiswbTFVdQpOM2dyNUJxVm5hbkp2VUtvbXREYnBHanRXemgxdDJmM0FBVG5VNGxsQW9JQkFIUkZ4NWFlNUtVYjBJcm1kMDl4Cm9OamozaHIydnBJRlNiWFdMZzB5b3B6L0h4YU13RjRESHV4ME5ZU0M5d3U3aFRFd0g2S01JQW5nZC9jbVFydFgKZHMreHRNMVEvOXZXWjNtQ3BMcllQOFk3SWd5bC9LcGxuR3RyTlJMZVV4eTRqME1ZQVpwTi9EYWpiOUV3Vm5BdQpuVVo0SnVydSt4ZG9lbEhGSGdMRkpqbXNaS2pNWEZBNXhZTXViRktTVkUxRjZvQjdMN3FIWTZzZGwzOVMxRk5nCnRJWWw1ZktKWHVKcDFFTGhHZWo0djY4cm1laFMxcUs5aDBNcVhXd1BNK0xHOTlPNHYvc05LYjB6SkpUQzFqWTkKajRBYnI0dmk5amhXU2VlZ011azhqNi9YS3RId0VxajZTR3N5Ymt2WTU2aTkyVUFMdGRZU3VZYmVDM3M2VXdkbgowblVDZ2dFQUxWYU16Q3hFR1RzbFFRYUlCUFdwTTRBRnh0WVJoeXcwWksydmZPcC9HUXZXbXBIeDkwZlRyZ2RtClpaTVhNdGc5Q05HaFBVZ2F6NGNPOFU3bExjbm1HRGNjalF2TmF4cTNSK21MRm5ScFNtRllCdTBISkMrVFdXc0UKbStrWnd0ZUJXNWNNWERYWmxBam1CYnBDT25veGp2SU9RRzVoa2JFRmNtNUtvWmIvWWpaWnorajFkUDgzdHlWUgpCSVo3UzRaSFdGUlcyMHVaMWl1dE42YkhnRTZjK3c5dEVkWmFtMGRnWWliTW9kSEhvaEU1WE1odmxUdkJKL0ZJCmlXaFNhOXhUazNCaFNaSE0zNXpzUEZmVk5EKzMweXBQa1AySlQ4Q2p4TFcwVHNLclFqOEFubGJMTVE3VEtweHYKN2oybTdjSjRBVmdIQ2lTSW9pNzM5YzdxRVdmaEFBPT0KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQo=
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: webapp-tls
+  namespace: webapp-ns
+type: kubernetes.io/tls
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: mtls
+  namespace: webapp-ns
+spec:
+  mtls:
+    mode: STRICT
