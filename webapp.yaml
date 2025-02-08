@@ -82,7 +82,7 @@ spec:
             - containerPort: 8080
           resources: {}
 ---
-apiVersion: networking.istio.io/v1
+apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
   name: webapp-gateway
@@ -107,7 +107,7 @@ spec:
       tls:
         httpsRedirect: true
 ---
-apiVersion: networking.istio.io/v1
+apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: webapp-virtualservice
@@ -126,7 +126,7 @@ spec:
             subset: v2
           weight: 50
 ---
-apiVersion: networking.istio.io/v1
+apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
   name: webapp-destinationrule
@@ -154,10 +154,10 @@ kind: Secret
 metadata:
   creationTimestamp: null
   name: webapp-tls
-  namespace: webapp-ns
+  namespace: istio-system
 type: kubernetes.io/tls
 ---
-apiVersion: security.istio.io/v1
+apiVersion: security.istio.io/v1beta1
 kind: PeerAuthentication
 metadata:
   name: mtls
